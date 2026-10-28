@@ -1,0 +1,638 @@
+<!DOCTYPE html>
+<html lang="mn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>360Sky - Skypark Interior 360 Tour</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            background-color: #000000;
+            color: #f8fafc;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-touch-callout: none;
+        }
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            position: absolute;
+            top: 0;
+            left: 0;
+            z-index: 1;
+            cursor: grab;
+            transition: opacity 0.4s ease-in-out;
+        }
+        #canvas-container:active {
+            cursor: grabbing;
+        }
+        .fade-out {
+            opacity: 0;
+        }
+        
+        .glass-panel {
+            background: rgba(15, 17, 23, 0.35) !important;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.4);
+        }
+        .glass-btn {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            transition: all 0.2s ease;
+        }
+        .glass-btn:hover {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.4);
+            transform: translateY(-2px);
+        }
+        .glass-btn:active {
+            transform: translateY(0);
+        }
+        .glass-btn.active {
+            background: rgba(255, 255, 255, 0.85) !important;
+            color: #0f172a !important;
+            border-color: #ffffff !important;
+            box-shadow: 0 0 14px rgba(255, 255, 255, 0.6);
+            font-weight: 700;
+        }
+
+        .nav-hotspot-container {
+            position: absolute;
+            z-index: 10;
+            transform: translate(-50%, -50%);
+            pointer-events: auto;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .nav-hotspot-container:hover {
+            transform: translate(-50%, -50%) scale(1.18);
+        }
+        .door-icon-circle {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: rgba(45, 45, 45, 0.25);
+            backdrop-filter: blur(6px);
+            border: 2.5px solid #ffffff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 10px rgba(255, 255, 255, 0.35);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 14px;
+            animation: doorPulse 2.4s infinite ease-in-out;
+            transition: all 0.2s ease;
+        }
+        .door-label {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            margin-bottom: 6px;
+            background: rgba(10, 10, 15, 0.25);
+            backdrop-filter: blur(6px);
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: 9999px;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        @media (hover: hover) {
+            .nav-hotspot-container:hover .door-label {
+                opacity: 1;
+            }
+        }
+        @keyframes doorPulse {
+            0%, 100% {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 8px rgba(255, 255, 255, 0.3);
+                transform: scale(1);
+            }
+            50% {
+                box-shadow: 0 4px 16px rgba(0, 0, 0, 0.7), 0 0 16px rgba(255, 255, 255, 0.7);
+                transform: scale(1.06);
+            }
+        }
+
+        #loader {
+            transition: opacity 0.3s ease, visibility 0.3s ease;
+        }
+        #loader.hidden-loader {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        #topMiniMap {
+            transition: opacity 0.25s ease, transform 0.25s ease;
+            transform-origin: top right;
+            width: 320px; 
+            max-width: 85vw;
+        }
+        #topMiniMap.hidden-map {
+            opacity: 0;
+            transform: scale(0.9) translateY(-10px);
+            pointer-events: none;
+        }
+
+        .map-pin {
+            position: absolute;
+            transform: translate(-50%, -50%) scale(1);
+            cursor: pointer;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            background: rgba(30, 41, 59, 0.6);
+            border: 2px solid #ffffff;
+            border-radius: 50%;
+            color: #ffffff;
+            font-size: 10px;
+            font-weight: bold;
+            box-shadow: 0 3px 8px rgba(0,0,0,0.4);
+            transition: transform 0.15s ease, background 0.15s ease;
+            transform-origin: center center;
+        }
+        .map-pin:hover {
+            transform: translate(-50%, -50%) scale(1.2);
+            background: #ffffff;
+            color: #0f172a;
+        }
+        .map-pin.active-pin {
+            background: #ef4444 !important;
+            border-color: #ffffff !important;
+            box-shadow: 0 0 12px #ef4444;
+            transform: translate(-50%, -50%) scale(1.25);
+            z-index: 20;
+        }
+    </style>
+</head>
+<body class="w-full h-screen overflow-hidden select-none bg-black">
+
+    <div id="canvas-container"></div>
+
+    <div id="loader" class="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/80 backdrop-blur-md p-4">
+        <div id="loadingSpinner" class="relative w-14 h-14 mb-4">
+            <div class="absolute inset-0 rounded-full border-4 border-white/10"></div>
+            <div class="absolute inset-0 rounded-full border-4 border-t-white animate-spin"></div>
+        </div>
+        <p id="loaderText" class="text-white text-sm font-semibold tracking-wide text-center">Cloudinary-аас мэдээлэл ачаалж байна...</p>
+        <p class="text-xs text-gray-400 mt-1 text-center" id="loaderSub">Skypark Tour</p>
+    </div>
+
+    <header class="fixed top-0 left-0 w-full z-30 p-3 sm:p-4 flex justify-between items-start pointer-events-none">
+        <div class="pointer-events-auto flex items-center gap-2">
+            <!-- Logo-г энд динамикаар ачаална -->
+            <img id="logoImg" alt="Sky Park Logo" class="w-12 h-12 sm:w-16 sm:h-16 object-contain drop-shadow-2xl" onerror="this.style.display='none'">
+        </div>
+
+        <div class="flex flex-col items-end pointer-events-auto">
+            <div class="glass-panel p-1.5 rounded-2xl flex items-center space-x-1.5 shadow-2xl">
+                <button id="autoRotateBtn" class="glass-btn p-2 rounded-xl text-gray-200 hover:text-white" title="Автомат эргүүлэх">
+                    <i class="fa-solid fa-rotate text-sm"></i>
+                </button>
+                <button id="mapToggleBtn" class="glass-btn p-2 rounded-xl text-gray-200 hover:text-white" title="Бүдүүвч зураг харах / нуух">
+                    <i class="fa-solid fa-map text-sm"></i>
+                </button>
+                <button id="fullscreenBtn" class="glass-btn p-2 rounded-xl text-gray-200 hover:text-white hidden sm:block" title="Бүтэн дэлгэц">
+                    <i class="fa-solid fa-expand text-sm"></i>
+                </button>
+            </div>
+
+            <div id="topMiniMap" class="hidden-map glass-panel mt-2 p-3 rounded-2xl shadow-2xl backdrop-blur-xl relative flex items-center justify-center overflow-hidden">
+                <button id="closeMiniMapBtn" class="absolute top-2 right-2 z-30 w-7 h-7 text-white hover:text-red-400 flex items-center justify-center text-sm transition drop-shadow-md bg-black/30 rounded-full" title="Хаах">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+
+                <div id="mapContainer" class="relative w-full flex items-center justify-center overflow-hidden" style="height: 195px;">
+                    <div id="mapWrapper" class="absolute inset-0 flex items-center justify-center origin-center" style="transform: scale(1.55);">
+                        <!-- Map зургийг энд динамикаар ачаална -->
+                        <img id="mapImg" alt="Mini Map" class="w-full h-full object-contain rounded-lg" onerror="this.onerror=null; this.src='https://via.placeholder.com/260x160?text=Map.png';">
+                    </div>
+                    
+                    <div id="pinsWrapper" class="absolute inset-0 pointer-events-none origin-center" style="transform: scale(1.1);"></div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <footer class="fixed bottom-0 left-0 w-full z-20 p-3 sm:p-4 flex flex-col items-center pointer-events-none">
+        <div class="glass-panel px-2 sm:px-3 py-2 rounded-2xl flex items-center space-x-1 sm:space-x-1.5 pointer-events-auto shadow-2xl overflow-x-auto max-w-[96vw] scrollbar-none">
+            <button id="prevBtn" class="glass-btn px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 text-white mr-0.5 shrink-0" title="Өмнөх зураг">
+                <i class="fa-solid fa-chevron-left text-xs"></i>
+                <span class="hidden sm:inline">Өмнөх</span>
+            </button>
+
+            <div id="roomPillsContainer" class="flex items-center space-x-1 shrink-0"></div>
+
+            <button id="nextBtn" class="glass-btn px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 text-white ml-0.5 shrink-0" title="Дараагийн зураг">
+                <span class="hidden sm:inline">Дараах</span>
+                <i class="fa-solid fa-chevron-right text-xs"></i>
+            </button>
+        </div>
+    </footer>
+
+    <script>
+        let rooms = [];
+        let currentRoomIndex = 0;
+        let scene, camera, renderer, sphere, textureLoader;
+        let isUserInteracting = false;
+        let onPointerDownPointerX = 0, onPointerDownPointerY = 0;
+        let lon = 0, onPointerDownLon = 0, lat = 0, onPointerDownLat = 0;
+        let phi = 0, theta = 0;
+        let targetFov = 75;
+        let autoRotate = false;
+        let hotspotDoms = [];
+        let touchStartDist = 0;
+
+        const container = document.getElementById('canvas-container');
+        const loader = document.getElementById('loader');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const loaderText = document.getElementById('loaderText');
+        const loaderSub = document.getElementById('loaderSub');
+        const roomPillsContainer = document.getElementById('roomPillsContainer');
+        const autoRotateBtn = document.getElementById('autoRotateBtn');
+        const mapToggleBtn = document.getElementById('mapToggleBtn');
+        const topMiniMap = document.getElementById('topMiniMap');
+        const closeMiniMapBtn = document.getElementById('closeMiniMapBtn');
+        const pinsWrapper = document.getElementById('pinsWrapper');
+
+        async function initData() {
+            try {
+                const response = await fetch('data.json');
+                const data = await response.json();
+                rooms = data.rooms;
+                
+                if(data.config) {
+                    document.getElementById('topMiniMap').style.width = `${Math.round(288 * (data.config.boxScale / 100))}px`;
+                    document.getElementById('mapContainer').style.height = `${Math.round(176 * (data.config.boxScale / 100))}px`;
+                    document.getElementById('mapWrapper').style.transform = `scale(${data.config.imageScale / 100})`;
+                    document.getElementById('pinsWrapper').style.transform = `scale(${data.config.pinsScale / 100})`;
+
+                    if(data.config.mapUrl) {
+                        document.getElementById('mapImg').src = data.config.mapUrl;
+                    }
+                    if(data.config.logoUrl) {
+                        document.getElementById('logoImg').src = data.config.logoUrl;
+                    }
+                }
+
+                buildPins();
+                initViewer();
+            } catch (err) {
+                console.error("data.json уншихад алдаа:", err);
+                loaderText.innerText = "data.json файлаа шалгана уу!";
+                loadingSpinner.style.display = 'none';
+            }
+        }
+
+        function buildPins() {
+            pinsWrapper.innerHTML = '';
+            rooms.forEach((room, idx) => {
+                const pin = document.createElement('div');
+                pin.className = 'map-pin pointer-events-auto';
+                pin.setAttribute('data-room', idx);
+                pin.style.top = room.mapPin.top;
+                pin.style.left = room.mapPin.left;
+                pin.title = `${idx + 1}. ${room.name}`;
+                pin.innerText = idx + 1;
+
+                pin.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    loadRoom(idx);
+                });
+
+                pinsWrapper.appendChild(pin);
+            });
+        }
+
+        function initViewer() {
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1100);
+            camera.target = new THREE.Vector3(0, 0, 0);
+
+            const geometry = new THREE.SphereGeometry(500, 64, 40);
+            geometry.scale(-1, 1, 1);
+
+            textureLoader = new THREE.TextureLoader();
+            const material = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            sphere = new THREE.Mesh(geometry, material);
+            scene.add(sphere);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            if (THREE.sRGBEncoding) {
+                renderer.outputEncoding = THREE.sRGBEncoding;
+            }
+            container.appendChild(renderer.domElement);
+
+            container.addEventListener('pointerdown', onPointerDown);
+            document.addEventListener('wheel', onDocumentMouseWheel, { passive: false });
+            container.addEventListener('touchstart', onTouchStart, { passive: true });
+            container.addEventListener('touchmove', onTouchMove, { passive: true });
+            window.addEventListener('resize', onWindowResize);
+
+            createRoomButtons();
+            loadRoom(0);
+            animate();
+        }
+
+        function createRoomButtons() {
+            roomPillsContainer.innerHTML = '';
+            rooms.forEach((room, idx) => {
+                const btn = document.createElement('button');
+                btn.id = `pill-room-${idx}`;
+                btn.className = `glass-btn px-2.5 sm:px-3 py-1 rounded-xl text-xs font-semibold flex items-center transition ${idx === currentRoomIndex ? 'active' : 'text-gray-300'}`;
+                btn.innerHTML = `<span>${idx + 1}</span>`;
+                btn.title = room.name;
+                btn.addEventListener('click', () => {
+                    if (currentRoomIndex !== idx) {
+                        loadRoom(idx);
+                    }
+                });
+                roomPillsContainer.appendChild(btn);
+            });
+        }
+
+        function updateRoomButtons() {
+            rooms.forEach((_, idx) => {
+                const btn = document.getElementById(`pill-room-${idx}`);
+                if (btn) {
+                    if (idx === currentRoomIndex) {
+                        btn.className = 'glass-btn active px-2.5 sm:px-3 py-1 rounded-xl text-xs font-semibold flex items-center';
+                    } else {
+                        btn.className = 'glass-btn px-2.5 sm:px-3 py-1 rounded-xl text-xs font-semibold flex items-center text-gray-300';
+                    }
+                }
+            });
+            updateActivePins();
+        }
+
+        function updateActivePins() {
+            const pins = document.querySelectorAll('.map-pin');
+            pins.forEach(pin => {
+                const roomIdx = parseInt(pin.getAttribute('data-room'));
+                if (roomIdx === currentRoomIndex) {
+                    pin.classList.add('active-pin');
+                } else {
+                    pin.classList.remove('active-pin');
+                }
+            });
+        }
+
+        function loadRoom(index) {
+            currentRoomIndex = index;
+            const room = rooms[index];
+
+            container.classList.add('fade-out');
+            loadingSpinner.classList.remove('hidden');
+            loaderText.innerText = `Зураг ${index + 1} ачаалж байна...`;
+            loaderSub.innerText = room.name;
+            loader.classList.remove('hidden-loader');
+
+            updateRoomButtons();
+
+            textureLoader.load(
+                room.file,
+                function (texture) {
+                    if (THREE.sRGBEncoding) {
+                        texture.encoding = THREE.sRGBEncoding;
+                    }
+                    texture.minFilter = THREE.LinearFilter;
+                    sphere.material.color.setHex(0xffffff);
+                    sphere.material.map = texture;
+                    sphere.material.needsUpdate = true;
+
+                    setupHotspots(room.hotspots);
+
+                    setTimeout(() => {
+                        loader.classList.add('hidden-loader');
+                        container.classList.remove('fade-out');
+                    }, 200);
+                },
+                undefined,
+                function (err) {
+                    console.error("Зураг ачаалахад алдаа:", err);
+                    loaderText.innerText = "Зураг татахад алдаа гарлаа!";
+                    loaderSub.innerText = room.file;
+                }
+            );
+        }
+
+        function setupHotspots(hotspotList) {
+            hotspotDoms.forEach(h => h.element.remove());
+            hotspotDoms = [];
+
+            if (!hotspotList || hotspotList.length === 0) return;
+
+            hotspotList.forEach(item => {
+                const containerDiv = document.createElement('div');
+                containerDiv.className = 'nav-hotspot-container';
+                containerDiv.innerHTML = `
+                    <div class="door-label">${item.text}</div>
+                    <div class="door-icon-circle">
+                        <i class="fa-solid ${item.icon || 'fa-chevron-left'}"></i>
+                    </div>
+                `;
+
+                containerDiv.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const targetIndex = item.targetId - 1;
+                    if (targetIndex >= 0 && targetIndex < rooms.length) {
+                        loadRoom(targetIndex);
+                    }
+                });
+
+                document.body.appendChild(containerDiv);
+                hotspotDoms.push({ element: containerDiv, lon: item.lon, lat: item.lat });
+            });
+        }
+
+        function updateHotspotsPosition() {
+            hotspotDoms.forEach(h => {
+                const hPhi = THREE.MathUtils.degToRad(90 - h.lat);
+                const hTheta = THREE.MathUtils.degToRad(h.lon);
+
+                const pos = new THREE.Vector3(
+                    500 * Math.sin(hPhi) * Math.cos(hTheta),
+                    500 * Math.cos(hPhi),
+                    500 * Math.sin(hPhi) * Math.sin(hTheta)
+                );
+
+                pos.project(camera);
+
+                if (pos.z > 1) {
+                    h.element.style.display = 'none';
+                    return;
+                }
+
+                const x = (pos.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-(pos.y * 0.5) + 0.5) * window.innerHeight;
+
+                h.element.style.display = 'block';
+                h.element.style.left = `${x}px`;
+                h.element.style.top = `${y}px`;
+            });
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            update();
+        }
+
+        function update() {
+            if (autoRotate && !isUserInteracting) {
+                lon += 0.08;
+            }
+
+            camera.fov += (targetFov - camera.fov) * 0.1;
+            camera.updateProjectionMatrix();
+
+            lat = Math.max(-85, Math.min(85, lat));
+            phi = THREE.MathUtils.degToRad(90 - lat);
+            theta = THREE.MathUtils.degToRad(lon);
+
+            camera.target.x = 500 * Math.sin(phi) * Math.cos(theta);
+            camera.target.y = 500 * Math.cos(phi);
+            camera.target.z = 500 * Math.sin(phi) * Math.sin(theta);
+
+            camera.lookAt(camera.target);
+            renderer.render(scene, camera);
+            updateHotspotsPosition();
+        }
+
+        function onPointerDown(event) {
+            if (event.isPrimary === false) return;
+            isUserInteracting = true;
+            onPointerDownPointerX = event.clientX;
+            onPointerDownPointerY = event.clientY;
+            onPointerDownLon = lon;
+            onPointerDownLat = lat;
+
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
+        }
+
+        function onPointerMove(event) {
+            if (event.isPrimary === false) return;
+            lon = (onPointerDownPointerX - event.clientX) * 0.12 + onPointerDownLon;
+            lat = (event.clientY - onPointerDownPointerY) * 0.12 + onPointerDownLat;
+        }
+
+        function onPointerUp(event) {
+            if (event.isPrimary === false) return;
+            isUserInteracting = false;
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
+        }
+
+        function onTouchStart(e) {
+            if (e.touches.length === 2) {
+                touchStartDist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+            }
+        }
+
+        function onTouchMove(e) {
+            if (e.touches.length === 2) {
+                const dist = Math.hypot(
+                    e.touches[0].clientX - e.touches[1].clientX,
+                    e.touches[0].clientY - e.touches[1].clientY
+                );
+                const diff = touchStartDist - dist;
+                targetFov += diff * 0.05;
+                targetFov = Math.max(30, Math.min(100, targetFov));
+                touchStartDist = dist;
+            }
+        }
+
+        function onDocumentMouseWheel(event) {
+            event.preventDefault();
+            targetFov += event.deltaY * 0.05;
+            targetFov = Math.max(30, Math.min(100, targetFov));
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        document.getElementById('prevBtn').addEventListener('click', () => {
+            let prevIndex = currentRoomIndex - 1;
+            if (prevIndex < 0) prevIndex = rooms.length - 1;
+            loadRoom(prevIndex);
+        });
+
+        document.getElementById('nextBtn').addEventListener('click', () => {
+            let nextIndex = (currentRoomIndex + 1) % rooms.length;
+            loadRoom(nextIndex);
+        });
+
+        if (autoRotateBtn) {
+            autoRotateBtn.addEventListener('click', () => {
+                autoRotate = !autoRotate;
+                if (autoRotate) {
+                    autoRotateBtn.classList.add('active');
+                } else {
+                    autoRotateBtn.classList.remove('active');
+                }
+            });
+        }
+
+        if (mapToggleBtn && topMiniMap) {
+            mapToggleBtn.addEventListener('click', () => {
+                const isHidden = topMiniMap.classList.contains('hidden-map');
+                if (isHidden) {
+                    topMiniMap.classList.remove('hidden-map');
+                    mapToggleBtn.classList.add('active');
+                    updateActivePins();
+                } else {
+                    topMiniMap.classList.add('hidden-map');
+                    mapToggleBtn.classList.remove('active');
+                }
+            });
+
+            closeMiniMapBtn.addEventListener('click', () => {
+                topMiniMap.classList.add('hidden-map');
+                mapToggleBtn.classList.remove('active');
+            });
+        }
+
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        if (fullscreenBtn) {
+            fullscreenBtn.addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                } else {
+                    if (document.exitFullscreen) {
+                        document.exitFullscreen();
+                    }
+                }
+            });
+        }
+
+        window.addEventListener('load', initData);
+    </script>
+</body>
+</html>
